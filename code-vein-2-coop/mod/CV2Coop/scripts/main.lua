@@ -206,6 +206,30 @@ local function funcs(kind, needle)
     log("---- " .. count .. " functions ----")
 end
 
+-- The managers most likely to drive loading, the title flow and sessions.
+local SURVEY = {
+    "BP_TitleProgressManager_C",
+    "BP_GameSystemManager_C",
+    "BP_ScreenMaskManager_C",
+    "BP_AppOnlineSessionManager_C",
+    "SessionTaskManager",
+    "OnlineUserSubsystem",
+    "PlayerManager",
+    "FastTravelSubsystem",
+    "FieldSubsystem",
+    "WorldPartitionController",
+    "AsyncLoadingScreenSubsystem",
+}
+
+local function survey()
+    for _, class_name in ipairs(SURVEY) do
+        safely("survey " .. class_name, function()
+            funcs(class_name)
+        end)
+    end
+    log("---- survey done ----")
+end
+
 local function host()
     local map = current_map()
     log("hosting: reloading '" .. map .. "' as a listen server on port " .. config.port)
@@ -270,6 +294,10 @@ RegisterConsoleCommandHandler("coop_hide", function(_, params)
     return true
 end)
 
+RegisterConsoleCommandHandler("coop_survey", function()
+    on_game_thread("survey", survey)
+    return true
+end)
 RegisterConsoleCommandHandler("coop_objs", function(_, params)
     local class_name = params and params[1]
     on_game_thread("objs", function()
