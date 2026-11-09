@@ -97,6 +97,44 @@ local function dump()
     log("---- end dump ----")
 end
 
+-- Every live UI widget whose name contains `needle` (lower-case), or every
+-- top-level one when no needle is given.
+local function each_widget(needle, fn)
+    for _, w in ipairs(FindAllOf("UserWidget") or {}) do
+        if valid(w) then
+            local name = w:GetFullName()
+            local top = w:IsInViewport()
+            local matches = needle and name:lower():find(needle, 1, true)
+            if matches or (not needle and top) then
+                fn(w, name, top)
+            end
+        end
+    end
+end
+
+-- List UI widgets, to find whatever is drawing the stuck loading screen.
+local function widgets(needle)
+    log("---- widgets" .. (needle and (" matching '" .. needle .. "'") or " on screen") .. " ----")
+    local count = 0
+    each_widget(needle, function(w, name, top)
+        count = count + 1
+        log(string.format("%s%s visible=%s", top and "[top] " or "      ", name, tostring(w:IsVisible())))
+    end)
+    log("---- " .. count .. " widgets ----")
+end
+
+-- Collapse matching widgets (ESlateVisibility::Collapsed = 1).
+local function hide(needle)
+    if not needle then
+        log("usage: coop_hide <part of widget name>")
+        return
+    end
+    each_widget(needle, function(w, name)
+        log("hiding " .. name)
+        w:SetVisibility(1)
+    end)
+end
+
 local function host()
     local map = current_map()
     log("hosting: reloading '" .. map .. "' as a listen server on port " .. config.port)
@@ -137,6 +175,26 @@ RegisterConsoleCommandHandler("coop_join", function(_, params)
     local address = params and params[1]
     on_game_thread("join", function()
         join(address)
+    end)
+    return true
+end)
+
+local function first_param(params)
+    local p = params and params[1]
+    return p and p:lower() or nil
+end
+
+RegisterConsoleCommandHandler("coop_widgets", function(_, params)
+    local needle = first_param(params)
+    on_game_thread("widgets", function()
+        widgets(needle)
+    end)
+    return true
+end)
+RegisterConsoleCommandHandler("coop_hide", function(_, params)
+    local needle = first_param(params)
+    on_game_thread("hide", function()
+        hide(needle)
     end)
     return true
 end)
