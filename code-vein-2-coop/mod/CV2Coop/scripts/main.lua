@@ -146,7 +146,15 @@ local function hide(needle)
     end)
 end
 
+-- Short names for the objects we call most.
+local ALIASES = {
+    session = "BP_AppOnlineSessionManager_C",
+    user = "OnlineUserSubsystem",
+    players = "PlayerManager",
+}
+
 local function target_object(kind)
+    kind = kind and (ALIASES[kind:lower()] or kind)
     local pc = UEHelpers.GetPlayerController()
     local world = UEHelpers.GetWorld()
     local statics = UEHelpers.GetGameplayStatics()
@@ -261,10 +269,11 @@ local function show(value)
     return tostring(value)
 end
 
--- Call a function that takes no arguments on a game object and log the result.
-local function call(class_name, fn_name)
+-- Call a function on a game object and log the result. Arguments may be
+-- booleans, numbers or strings.
+local function call(class_name, fn_name, ...)
     if not class_name or not fn_name then
-        log("usage: coop_call <ClassName> <FunctionName>")
+        log("usage: coop_call <session|user|players|ClassName> <FunctionName> [arguments]")
         return
     end
     local obj = target_object(class_name)
@@ -272,8 +281,44 @@ local function call(class_name, fn_name)
         log("no live object of class " .. class_name)
         return
     end
-    local ok, result = pcall(function() return obj[fn_name](obj) end)
-    log(class_name .. ":" .. fn_name .. "() -> " .. (ok and show(result) or ("failed: " .. tostring(result))))
+    local args = { ... }
+    local shown = {}
+    for i, a in ipairs(args) do shown[i] = tostring(a) end
+    local ok, result = pcall(function() return obj[fn_name](obj, table.unpack(args)) end)
+    log(class_name .. ":" .. fn_name .. "(" .. table.concat(shown, ", ") .. ") -> "
+        .. (ok and show(result) or ("failed: " .. tostring(result))))
+end
+
+-- Current state of the game's session system and of the network.
+local function state()
+    log("---- state ----")
+    for _, fn_name in ipairs({ "IsOnlineMode", "GetSessionStateStr", "HasSessions", "IsAdvertiseSession",
+        "IsHostPlayer", "IsGuestPlayer", "GetCurrentMapPath" }) do
+        call("session", fn_name)
+    end
+    call("user", "GetUserNickName")
+    call("user", "IsPlayerLoggedIn", 0)
+    call("user", "GetCanPlayOnline", 0)
+    safely("net role", function()
+        local world = UEHelpers.GetWorld()
+        local ksl = UEHelpers.GetKismetSystemLibrary()
+        log("map: " .. current_map() .. ", standalone: " .. tostring(ksl:IsStandalone(world))
+            .. ", is server: " .. tostring(ksl:IsServer(world)))
+        log("player controllers: " .. #(FindAllOf("PlayerController") or {}))
+    end)
+    log("---- end state ----")
+end
+
+-- Host a session through the game's own session manager.
+local function cohost(mode)
+    local lan = mode ~= "online"
+    log("hosting through the game's session manager (" .. (lan and "LAN" or "online") .. ")")
+    state()
+    call("session", "SetLANMatch", lan)
+    call("session", "SetPlayerNum", 2)
+    call("session", "SetOnlineMode", true)
+    call("session", "CreateSession", false)
+    state()
 end
 
 -- Everything about the game's built-in session system in one go: what its
@@ -282,10 +327,7 @@ local function session()
     for _, class_name in ipairs({ "BP_AppOnlineSessionManager_C", "OnlineUserSubsystem", "PlayerManager" }) do
         safely("funcs " .. class_name, function() funcs(class_name) end)
     end
-    for _, fn_name in ipairs({ "IsOnlineMode", "GetSessionStateStr", "HasSessions", "IsAdvertiseSession", "GetCurrentMapPath" }) do
-        call("BP_AppOnlineSessionManager_C", fn_name)
-    end
-    log("---- session done ----")
+    state()
 end
 
 local function host()
@@ -360,10 +402,33 @@ RegisterConsoleCommandHandler("coop_session", function()
     on_game_thread("session", session)
     return true
 end)
+-- "true"/"false" become booleans, numbers become numbers, the rest stay text.
+local function parse_arg(text)
+    if text == "true" then return true end
+    if text == "false" then return false end
+    return tonumber(text) or text
+end
+
 RegisterConsoleCommandHandler("coop_call", function(_, params)
-    local class_name, fn_name = params and params[1], params and params[2]
+    params = params or {}
+    local class_name, fn_name = params[1], params[2]
+    local args = {}
+    for i = 3, #params do
+        args[#args + 1] = parse_arg(params[i])
+    end
     on_game_thread("call", function()
-        call(class_name, fn_name)
+        call(class_name, fn_name, table.unpack(args))
+    end)
+    return true
+end)
+RegisterConsoleCommandHandler("coop_state", function()
+    on_game_thread("state", state)
+    return true
+end)
+RegisterConsoleCommandHandler("coop_cohost", function(_, params)
+    local mode = first_param(params)
+    on_game_thread("cohost", function()
+        cohost(mode)
     end)
     return true
 end)
