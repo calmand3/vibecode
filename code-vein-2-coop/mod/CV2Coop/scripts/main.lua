@@ -155,7 +155,26 @@ local function target_object(kind)
     if kind == "state" then return statics:GetGameState(world) end
     if kind == "controller" then return pc end
     if kind == "pawn" then return pc.Pawn end
+    -- Anything else is taken as a class name, e.g. a subsystem.
+    if kind then return FindFirstOf(kind) end
     return nil
+end
+
+-- List every live object of a class (and its subclasses).
+local function objs(class_name)
+    if not class_name then
+        log("usage: coop_objs <ClassName>, e.g. coop_objs GameInstanceSubsystem")
+        return
+    end
+    log("---- objects of class " .. class_name .. " ----")
+    local count = 0
+    for _, obj in ipairs(FindAllOf(class_name) or {}) do
+        if valid(obj) and count < 300 then
+            count = count + 1
+            log("  " .. obj:GetFullName())
+        end
+    end
+    log("---- " .. count .. " objects ----")
 end
 
 -- List the game's own functions on one of its core objects, to find the
@@ -163,7 +182,7 @@ end
 local function funcs(kind, needle)
     local obj = target_object(kind)
     if not valid(obj) then
-        log("usage: coop_funcs <instance|mode|state|controller|pawn> [part of name]")
+        log("usage: coop_funcs <instance|mode|state|controller|pawn|ClassName> [part of name]")
         return
     end
     log("---- functions on " .. full_name(obj) .. " ----")
@@ -251,8 +270,15 @@ RegisterConsoleCommandHandler("coop_hide", function(_, params)
     return true
 end)
 
+RegisterConsoleCommandHandler("coop_objs", function(_, params)
+    local class_name = params and params[1]
+    on_game_thread("objs", function()
+        objs(class_name)
+    end)
+    return true
+end)
 RegisterConsoleCommandHandler("coop_funcs", function(_, params)
-    local kind = first_param(params)
+    local kind = params and params[1]
     local needle = params and params[2] and params[2]:lower() or nil
     on_game_thread("funcs", function()
         funcs(kind, needle)
