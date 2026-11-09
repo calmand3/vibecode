@@ -309,20 +309,45 @@ local function state()
     log("---- end state ----")
 end
 
--- Host a session through the game's own session manager.
-local function cohost(mode)
-    local lan = mode ~= "online"
-    log("hosting through the game's session manager (" .. (lan and "LAN" or "online") .. ")")
-    state()
+-- The map path as the session manager itself reports it.
+local function session_map()
+    local mgr = target_object("session")
+    return mgr:GetCurrentMapPath():ToString()
+end
+
+local function prepare_session(lan)
     call("session", "SetLANMatch", lan)
     call("session", "SetPlayerNum", 2)
     call("session", "SetOnlineMode", true)
-    call("session", "CreateSession", false)
+end
+
+-- Host a session through the game's own session manager.
+--   lan / online: CreateSession, as a LAN or an online match
+--   map:          CreateSessionWithMapName, naming the current map
+local function cohost(mode)
+    mode = mode or "lan"
+    log("hosting through the game's session manager (" .. mode .. ")")
+    state()
+    prepare_session(mode ~= "online")
+    if mode == "map" then
+        call("user", "TryToLoginForOnlinePlay", 0)
+        call("session", "CreateSessionWithMapName", session_map(), {}, false)
+    else
+        call("session", "CreateSession", false)
+    end
     state()
 end
 
--- Everything about the game's built-in session system in one go: what its
--- functions take, and what state it is in right now.
+-- Travel to the current map as a host without creating an online session,
+-- using the developers' own test function.
+local function travel()
+    log("server travel through the game's session manager")
+    state()
+    prepare_session(true)
+    call("session", "ServerTravelOnlyTest", session_map())
+    state()
+end
+
 local function session()
     for _, class_name in ipairs({ "BP_AppOnlineSessionManager_C", "OnlineUserSubsystem", "PlayerManager" }) do
         safely("funcs " .. class_name, function() funcs(class_name) end)
@@ -423,6 +448,10 @@ RegisterConsoleCommandHandler("coop_call", function(_, params)
 end)
 RegisterConsoleCommandHandler("coop_state", function()
     on_game_thread("state", state)
+    return true
+end)
+RegisterConsoleCommandHandler("coop_travel", function()
+    on_game_thread("travel", travel)
     return true
 end)
 RegisterConsoleCommandHandler("coop_cohost", function(_, params)
