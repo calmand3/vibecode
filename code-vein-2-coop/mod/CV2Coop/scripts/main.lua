@@ -177,6 +177,27 @@ local function objs(class_name)
     log("---- " .. count .. " objects ----")
 end
 
+-- "Name: Type" for each parameter of a function (the return value shows up
+-- as ReturnValue). Struct, object and enum types include what they refer to.
+local function signature(fn)
+    local parts = {}
+    pcall(function()
+        fn:ForEachProperty(function(prop)
+            local text = prop:GetFName():ToString()
+            pcall(function()
+                text = text .. ": " .. prop:GetClass():GetFName():ToString()
+            end)
+            for _, getter in ipairs({ "GetStruct", "GetPropertyClass", "GetEnum" }) do
+                pcall(function()
+                    text = text .. " " .. prop[getter](prop):GetFName():ToString()
+                end)
+            end
+            parts[#parts + 1] = text
+        end)
+    end)
+    return table.concat(parts, ", ")
+end
+
 -- List the game's own functions on one of its core objects, to find the
 -- ones that drive map loading. Engine base classes are skipped.
 local function funcs(kind, needle)
@@ -198,7 +219,7 @@ local function funcs(kind, needle)
             local name = fn:GetFName():ToString()
             if not needle or name:lower():find(needle, 1, true) then
                 count = count + 1
-                log("  " .. name)
+                log("  " .. name .. "(" .. signature(fn) .. ")")
             end
         end)
         class = class:GetSuperStruct()
@@ -228,6 +249,43 @@ local function survey()
         end)
     end
     log("---- survey done ----")
+end
+
+local function show(value)
+    if type(value) == "userdata" then
+        local ok, text = pcall(function() return value:ToString() end)
+        if ok then return text end
+        ok, text = pcall(function() return value:GetFullName() end)
+        if ok then return text end
+    end
+    return tostring(value)
+end
+
+-- Call a function that takes no arguments on a game object and log the result.
+local function call(class_name, fn_name)
+    if not class_name or not fn_name then
+        log("usage: coop_call <ClassName> <FunctionName>")
+        return
+    end
+    local obj = target_object(class_name)
+    if not valid(obj) then
+        log("no live object of class " .. class_name)
+        return
+    end
+    local ok, result = pcall(function() return obj[fn_name](obj) end)
+    log(class_name .. ":" .. fn_name .. "() -> " .. (ok and show(result) or ("failed: " .. tostring(result))))
+end
+
+-- Everything about the game's built-in session system in one go: what its
+-- functions take, and what state it is in right now.
+local function session()
+    for _, class_name in ipairs({ "BP_AppOnlineSessionManager_C", "OnlineUserSubsystem", "PlayerManager" }) do
+        safely("funcs " .. class_name, function() funcs(class_name) end)
+    end
+    for _, fn_name in ipairs({ "IsOnlineMode", "GetSessionStateStr", "HasSessions", "IsAdvertiseSession", "GetCurrentMapPath" }) do
+        call("BP_AppOnlineSessionManager_C", fn_name)
+    end
+    log("---- session done ----")
 end
 
 local function host()
@@ -296,6 +354,17 @@ end)
 
 RegisterConsoleCommandHandler("coop_survey", function()
     on_game_thread("survey", survey)
+    return true
+end)
+RegisterConsoleCommandHandler("coop_session", function()
+    on_game_thread("session", session)
+    return true
+end)
+RegisterConsoleCommandHandler("coop_call", function(_, params)
+    local class_name, fn_name = params and params[1], params and params[2]
+    on_game_thread("call", function()
+        call(class_name, fn_name)
+    end)
     return true
 end)
 RegisterConsoleCommandHandler("coop_objs", function(_, params)
