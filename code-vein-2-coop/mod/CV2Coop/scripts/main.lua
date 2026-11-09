@@ -82,6 +82,17 @@ local function dump()
     safely("game mode", function()
         local gm = UEHelpers.GetGameplayStatics():GetGameMode(world)
         log("game mode:  " .. full_name(gm))
+        -- The options the game itself passed when it opened this map.
+        log("map options: '" .. gm.OptionsString:ToString() .. "'")
+    end)
+    safely("game instance", function()
+        log("game instance: " .. full_name(FindFirstOf("GameInstance")))
+    end)
+    safely("pawn state", function()
+        local pawn = pc.Pawn
+        if valid(pawn) then
+            log("pawn hidden: " .. tostring(pawn.bHidden))
+        end
     end)
     safely("game state", function()
         local gs = UEHelpers.GetGameplayStatics():GetGameState(world)
@@ -133,6 +144,47 @@ local function hide(needle)
         log("hiding " .. name)
         w:SetVisibility(1)
     end)
+end
+
+local function target_object(kind)
+    local pc = UEHelpers.GetPlayerController()
+    local world = UEHelpers.GetWorld()
+    local statics = UEHelpers.GetGameplayStatics()
+    if kind == "instance" then return FindFirstOf("GameInstance") end
+    if kind == "mode" then return statics:GetGameMode(world) end
+    if kind == "state" then return statics:GetGameState(world) end
+    if kind == "controller" then return pc end
+    if kind == "pawn" then return pc.Pawn end
+    return nil
+end
+
+-- List the game's own functions on one of its core objects, to find the
+-- ones that drive map loading. Engine base classes are skipped.
+local function funcs(kind, needle)
+    local obj = target_object(kind)
+    if not valid(obj) then
+        log("usage: coop_funcs <instance|mode|state|controller|pawn> [part of name]")
+        return
+    end
+    log("---- functions on " .. full_name(obj) .. " ----")
+    local class = obj:GetClass()
+    local count = 0
+    while valid(class) do
+        local class_name = class:GetFullName()
+        if class_name:find("/Script/Engine.", 1, true) or class_name:find("/Script/CoreUObject.", 1, true) then
+            break
+        end
+        log("class " .. class_name)
+        class:ForEachFunction(function(fn)
+            local name = fn:GetFName():ToString()
+            if not needle or name:lower():find(needle, 1, true) then
+                count = count + 1
+                log("  " .. name)
+            end
+        end)
+        class = class:GetSuperStruct()
+    end
+    log("---- " .. count .. " functions ----")
 end
 
 local function host()
@@ -195,6 +247,15 @@ RegisterConsoleCommandHandler("coop_hide", function(_, params)
     local needle = first_param(params)
     on_game_thread("hide", function()
         hide(needle)
+    end)
+    return true
+end)
+
+RegisterConsoleCommandHandler("coop_funcs", function(_, params)
+    local kind = first_param(params)
+    local needle = params and params[2] and params[2]:lower() or nil
+    on_game_thread("funcs", function()
+        funcs(kind, needle)
     end)
     return true
 end)
