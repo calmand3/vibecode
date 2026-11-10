@@ -306,23 +306,31 @@ local function class_info(path)
     log("---- end class ----")
 end
 
--- Ask the game for its network debug menu and force it onto the screen.
+-- Put the developers' network debug menu on screen. The game's own
+-- ShowOnlineDebugMenu does nothing in the shipped build, so build the
+-- widget from its class directly.
+local debug_widget = nil
 local function debugmenu()
-    local mgr = target_object("session")
-    mgr:ShowOnlineDebugMenu()
-    local widget = mgr.DebugWidgetInstance
-    log("debug menu widget: " .. full_name(widget))
-    if not valid(widget) then
+    local pc = UEHelpers.GetPlayerController()
+    if not valid(debug_widget) then
+        local class = StaticFindObject("/Game/Blueprint/Network/WBP_NetworkDebugMenu.WBP_NetworkDebugMenu_C")
+        local library = StaticFindObject("/Script/UMG.Default__WidgetBlueprintLibrary")
+        if not valid(class) or not valid(library) then
+            log("debug menu class or widget library not found")
+            return
+        end
+        debug_widget = library:Create(UEHelpers.GetWorld(), class, pc)
+    end
+    log("debug menu widget: " .. full_name(debug_widget))
+    if not valid(debug_widget) then
         return
     end
-    log("in viewport: " .. tostring(widget:IsInViewport()) .. ", visible: " .. tostring(widget:IsVisible()))
-    if not widget:IsInViewport() then
-        widget:AddToViewport(1000)
+    if not debug_widget:IsInViewport() then
+        debug_widget:AddToViewport(1000)
     end
-    widget:SetVisibility(0) -- ESlateVisibility::Visible
-    local pc = UEHelpers.GetPlayerController()
+    debug_widget:SetVisibility(0) -- ESlateVisibility::Visible
     pc.bShowMouseCursor = true
-    log("after forcing: in viewport: " .. tostring(widget:IsInViewport()) .. ", visible: " .. tostring(widget:IsVisible()))
+    log("in viewport: " .. tostring(debug_widget:IsInViewport()) .. ", visible: " .. tostring(debug_widget:IsVisible()))
 end
 
 -- The managers most likely to drive loading, the title flow and sessions.
@@ -392,7 +400,12 @@ end
 -- The map path as the session manager itself reports it.
 local function session_map()
     local mgr = target_object("session")
-    return mgr:GetCurrentMapPath():ToString()
+    local path = mgr:GetCurrentMapPath():ToString()
+    -- From the title screen, host the hub, not the title map.
+    if path:find("/Title", 1, true) then
+        path = "/Game/Map/" .. config.host_map .. "/" .. config.host_map
+    end
+    return path
 end
 
 local function prepare_session(lan)
