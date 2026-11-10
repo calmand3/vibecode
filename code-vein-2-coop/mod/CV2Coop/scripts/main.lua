@@ -281,6 +281,55 @@ local function props(kind, needle)
     log("---- end properties ----")
 end
 
+-- List the functions and variables of a class by its full path, without
+-- needing a live object. Used to read the developers' network debug menu.
+local function class_info(path)
+    if not path then
+        log("usage: coop_class </Game/...path.ClassName_C>")
+        return
+    end
+    local class = StaticFindObject(path)
+    if not valid(class) then
+        log("no class at " .. path)
+        return
+    end
+    log("---- class " .. class:GetFullName() .. " ----")
+    log("functions:")
+    class:ForEachFunction(function(fn)
+        log("  " .. fn:GetFName():ToString() .. "(" .. signature(fn) .. ")")
+    end)
+    log("variables:")
+    class:ForEachProperty(function(prop)
+        local text = prop:GetFName():ToString()
+        for _, getter in ipairs({ "GetPropertyClass", "GetStruct" }) do
+            pcall(function()
+                text = text .. ": " .. prop[getter](prop):GetFName():ToString()
+            end)
+        end
+        log("  " .. text)
+    end)
+    log("---- end class ----")
+end
+
+-- Ask the game for its network debug menu and force it onto the screen.
+local function debugmenu()
+    local mgr = target_object("session")
+    mgr:ShowOnlineDebugMenu()
+    local widget = mgr.DebugWidgetInstance
+    log("debug menu widget: " .. full_name(widget))
+    if not valid(widget) then
+        return
+    end
+    log("in viewport: " .. tostring(widget:IsInViewport()) .. ", visible: " .. tostring(widget:IsVisible()))
+    if not widget:IsInViewport() then
+        widget:AddToViewport(1000)
+    end
+    widget:SetVisibility(0) -- ESlateVisibility::Visible
+    local pc = UEHelpers.GetPlayerController()
+    pc.bShowMouseCursor = true
+    log("after forcing: in viewport: " .. tostring(widget:IsInViewport()) .. ", visible: " .. tostring(widget:IsVisible()))
+end
+
 -- The managers most likely to drive loading, the title flow and sessions.
 local SURVEY = {
     "BP_TitleProgressManager_C",
@@ -601,6 +650,17 @@ RegisterConsoleCommandHandler("coop_find", function(_, params)
     on_game_thread("find", function()
         find(mode, kind)
     end)
+    return true
+end)
+RegisterConsoleCommandHandler("coop_class", function(_, params)
+    local path = params and params[1]
+    on_game_thread("class", function()
+        class_info(path)
+    end)
+    return true
+end)
+RegisterConsoleCommandHandler("coop_debugmenu", function()
+    on_game_thread("debugmenu", debugmenu)
     return true
 end)
 RegisterConsoleCommandHandler("coop_props", function(_, params)
