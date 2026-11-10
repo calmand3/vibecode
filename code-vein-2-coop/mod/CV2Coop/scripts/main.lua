@@ -400,12 +400,7 @@ end
 -- The map path as the session manager itself reports it.
 local function session_map()
     local mgr = target_object("session")
-    local path = mgr:GetCurrentMapPath():ToString()
-    -- From the title screen, host the hub, not the title map.
-    if path:find("/Title", 1, true) then
-        path = "/Game/Map/" .. config.host_map .. "/" .. config.host_map
-    end
-    return path
+    return mgr:GetCurrentMapPath():ToString()
 end
 
 local function prepare_session(lan)
@@ -421,6 +416,11 @@ end
 --   go:           map, then ServerTravelOnly to open the world to a guest
 local function cohost(mode)
     mode = mode or "lan"
+    -- Creating a session from the title screen crashes the game.
+    if current_map() == "Title" then
+        log("run coop_cohost in the hub, after hosting from the title screen with coop_host or 'open MainWorld?listen'")
+        return
+    end
     log("hosting through the game's session manager (" .. mode .. ")")
     state()
     prepare_session(mode ~= "online" and mode ~= "net")
