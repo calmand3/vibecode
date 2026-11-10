@@ -146,6 +146,16 @@ local function hide(needle)
     end)
 end
 
+local function show(value)
+    if type(value) == "userdata" then
+        local ok, text = pcall(function() return value:ToString() end)
+        if ok then return text end
+        ok, text = pcall(function() return value:GetFullName() end)
+        if ok then return text end
+    end
+    return tostring(value)
+end
+
 -- Short names for the objects we call most.
 local ALIASES = {
     session = "BP_AppOnlineSessionManager_C",
@@ -235,6 +245,42 @@ local function funcs(kind, needle)
     log("---- " .. count .. " functions ----")
 end
 
+-- List the game's own properties on an object with their current values.
+local function props(kind, needle)
+    local obj = target_object(kind)
+    if not valid(obj) then
+        log("usage: coop_props <session|user|players|ClassName> [part of name]")
+        return
+    end
+    log("---- properties on " .. full_name(obj) .. " ----")
+    local class = obj:GetClass()
+    while valid(class) do
+        local class_name = class:GetFullName()
+        if class_name:find("/Script/Engine.", 1, true) or class_name:find("/Script/CoreUObject.", 1, true) then
+            break
+        end
+        log("class " .. class_name)
+        class:ForEachProperty(function(prop)
+            local name = prop:GetFName():ToString()
+            if not needle or name:lower():find(needle, 1, true) then
+                local kind_text, value_text = "?", "?"
+                pcall(function() kind_text = prop:GetClass():GetFName():ToString() end)
+                pcall(function()
+                    local value = obj[name]
+                    if kind_text == "ArrayProperty" then
+                        value_text = "array of " .. #value
+                    else
+                        value_text = show(value)
+                    end
+                end)
+                log("  " .. name .. ": " .. kind_text .. " = " .. value_text)
+            end
+        end)
+        class = class:GetSuperStruct()
+    end
+    log("---- end properties ----")
+end
+
 -- The managers most likely to drive loading, the title flow and sessions.
 local SURVEY = {
     "BP_TitleProgressManager_C",
@@ -257,16 +303,6 @@ local function survey()
         end)
     end
     log("---- survey done ----")
-end
-
-local function show(value)
-    if type(value) == "userdata" then
-        local ok, text = pcall(function() return value:ToString() end)
-        if ok then return text end
-        ok, text = pcall(function() return value:GetFullName() end)
-        if ok then return text end
-    end
-    return tostring(value)
 end
 
 -- Call a function on a game object and log the result. Arguments may be
@@ -324,13 +360,14 @@ end
 -- Host a session through the game's own session manager.
 --   lan / online: CreateSession, as a LAN or an online match
 --   map:          CreateSessionWithMapName, naming the current map
+--   net:          like map, but as an online (Steam) session, not LAN
 --   go:           map, then ServerTravelOnly to open the world to a guest
 local function cohost(mode)
     mode = mode or "lan"
     log("hosting through the game's session manager (" .. mode .. ")")
     state()
-    prepare_session(mode ~= "online")
-    if mode == "map" or mode == "go" then
+    prepare_session(mode ~= "online" and mode ~= "net")
+    if mode == "map" or mode == "go" or mode == "net" then
         call("user", "TryToLoginForOnlinePlay", 0)
         call("session", "CreateSessionWithMapName", session_map(), {}, false)
         if mode == "go" then
@@ -343,10 +380,11 @@ local function cohost(mode)
 end
 
 -- Guest side: look for a host's session on the local network.
-local function cojoin()
-    log("searching for a session through the game's session manager")
+local function cojoin(mode)
+    local lan = mode ~= "net"
+    log("searching for a " .. (lan and "LAN" or "Steam") .. " session through the game's session manager")
     state()
-    prepare_session(true)
+    prepare_session(lan)
     call("user", "TryToLoginForOnlinePlay", 0)
     call("session", "FindAvailableSession")
     state()
@@ -383,8 +421,12 @@ end
 
 local function join(address)
     address = address or config.host_address
-    log("joining " .. address .. ":" .. config.port)
-    console("open " .. address .. ":" .. config.port)
+    -- A Steam address (steam.<17-digit id>) takes no port.
+    if not address:lower():find("^steam%.") then
+        address = address .. ":" .. config.port
+    end
+    log("joining " .. address)
+    console("open " .. address)
 end
 
 local function on_game_thread(label, fn)
@@ -470,8 +512,19 @@ RegisterConsoleCommandHandler("coop_state", function()
     on_game_thread("state", state)
     return true
 end)
-RegisterConsoleCommandHandler("coop_cojoin", function()
-    on_game_thread("cojoin", cojoin)
+RegisterConsoleCommandHandler("coop_cojoin", function(_, params)
+    local mode = first_param(params)
+    on_game_thread("cojoin", function()
+        cojoin(mode)
+    end)
+    return true
+end)
+RegisterConsoleCommandHandler("coop_props", function(_, params)
+    local kind = params and params[1]
+    local needle = params and params[2] and params[2]:lower() or nil
+    on_game_thread("props", function()
+        props(kind, needle)
+    end)
     return true
 end)
 RegisterConsoleCommandHandler("coop_travel", function()
