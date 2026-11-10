@@ -441,9 +441,11 @@ end
 
 -- Search with the engine's session functions directly, bypassing the
 -- game's FindAvailableSession wrapper.
-local function find(mode)
+local function find(mode, kind)
     local lan = mode ~= "net"
-    log("searching for a " .. (lan and "LAN" or "Steam") .. " session directly")
+    local lobbies = kind ~= "nolobby"
+    log("searching for a " .. (lan and "LAN" or "Steam") .. " session directly ("
+        .. (lobbies and "lobbies" or "no lobbies") .. ")")
     prepare_session(lan)
     call("user", "TryToLoginForOnlinePlay", 0)
     local mgr = target_object("session")
@@ -451,8 +453,9 @@ local function find(mode)
     if lan then
         own_search.OnlineMode = 1 -- ECommonSessionOnlineMode::LAN
     end
+    own_search.bUseLobbies = lobbies
     mgr:FindSessions(UEHelpers.GetPlayerController(), own_search)
-    log("search started; wait about 20 seconds, then run coop_found")
+    log("search started; wait about 30 seconds, then run coop_found")
 end
 
 -- Travel to the current map as a host without creating an online session,
@@ -486,8 +489,8 @@ end
 
 local function join(address)
     address = address or config.host_address
-    -- A Steam address (steam.<17-digit id>) takes no port.
-    if not address:lower():find("^steam%.") then
+    -- IP and Steam (steam.<17-digit id>) addresses both need a port.
+    if not address:find(":", 1, true) then
         address = address .. ":" .. config.port
     end
     log("joining " .. address)
@@ -594,8 +597,9 @@ RegisterConsoleCommandHandler("coop_joinfound", function()
 end)
 RegisterConsoleCommandHandler("coop_find", function(_, params)
     local mode = first_param(params)
+    local kind = params and params[2] and params[2]:lower() or nil
     on_game_thread("find", function()
-        find(mode)
+        find(mode, kind)
     end)
     return true
 end)
