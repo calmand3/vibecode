@@ -324,17 +324,31 @@ end
 -- Host a session through the game's own session manager.
 --   lan / online: CreateSession, as a LAN or an online match
 --   map:          CreateSessionWithMapName, naming the current map
+--   go:           map, then ServerTravelOnly to open the world to a guest
 local function cohost(mode)
     mode = mode or "lan"
     log("hosting through the game's session manager (" .. mode .. ")")
     state()
     prepare_session(mode ~= "online")
-    if mode == "map" then
+    if mode == "map" or mode == "go" then
         call("user", "TryToLoginForOnlinePlay", 0)
         call("session", "CreateSessionWithMapName", session_map(), {}, false)
+        if mode == "go" then
+            call("session", "ServerTravelOnly")
+        end
     else
         call("session", "CreateSession", false)
     end
+    state()
+end
+
+-- Guest side: look for a host's session on the local network.
+local function cojoin()
+    log("searching for a session through the game's session manager")
+    state()
+    prepare_session(true)
+    call("user", "TryToLoginForOnlinePlay", 0)
+    call("session", "FindAvailableSession")
     state()
 end
 
@@ -448,6 +462,10 @@ RegisterConsoleCommandHandler("coop_call", function(_, params)
 end)
 RegisterConsoleCommandHandler("coop_state", function()
     on_game_thread("state", state)
+    return true
+end)
+RegisterConsoleCommandHandler("coop_cojoin", function()
+    on_game_thread("cojoin", cojoin)
     return true
 end)
 RegisterConsoleCommandHandler("coop_travel", function()
