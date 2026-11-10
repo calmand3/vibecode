@@ -273,7 +273,7 @@ local function props(kind, needle)
                         value_text = show(value)
                     end
                 end)
-                log("  " .. name .. ": " .. kind_text .. " = " .. value_text)
+                log("  " .. name .. ": " .. tostring(kind_text) .. " = " .. tostring(value_text))
             end
         end)
         class = class:GetSuperStruct()
@@ -388,6 +388,71 @@ local function cojoin(mode)
     call("user", "TryToLoginForOnlinePlay", 0)
     call("session", "FindAvailableSession")
     state()
+end
+
+-- A search this mod started itself, kept so its results can be read later.
+local own_search = nil
+
+-- Every session search the game currently holds, with what each one found.
+local function searches()
+    local list = {}
+    for _, req in ipairs(FindAllOf("CommonSession_SearchSessionRequest") or {}) do
+        if valid(req) and not req:GetFullName():find("Default__", 1, true) then
+            list[#list + 1] = req
+        end
+    end
+    return list
+end
+
+local function found()
+    log("---- session searches ----")
+    for i, req in ipairs(searches()) do
+        local count = 0
+        pcall(function() count = #req.Results end)
+        log("search " .. i .. ": " .. req:GetFullName() .. " -> " .. count .. " result(s)")
+        for j = 1, count do
+            safely("result " .. j, function()
+                local result = req.Results[j]
+                log("  [" .. j .. "] " .. show(result:GetDescription())
+                    .. ", open slots: " .. tostring(result:GetNumOpenPublicConnections())
+                    .. ", ping: " .. tostring(result:GetPingInMs()))
+            end)
+        end
+    end
+    log("---- end searches ----")
+end
+
+-- Join the first session any search found.
+local function joinfound()
+    for _, req in ipairs(searches()) do
+        local count = 0
+        pcall(function() count = #req.Results end)
+        if count > 0 then
+            local mgr = target_object("session")
+            local pc = UEHelpers.GetPlayerController()
+            log("joining the session found by " .. req:GetFullName())
+            mgr:JoinSession(pc, req.Results[1])
+            state()
+            return
+        end
+    end
+    log("no search has any results to join; run coop_cojoin or coop_find first")
+end
+
+-- Search with the engine's session functions directly, bypassing the
+-- game's FindAvailableSession wrapper.
+local function find(mode)
+    local lan = mode ~= "net"
+    log("searching for a " .. (lan and "LAN" or "Steam") .. " session directly")
+    prepare_session(lan)
+    call("user", "TryToLoginForOnlinePlay", 0)
+    local mgr = target_object("session")
+    own_search = mgr:CreateOnlineSearchSessionRequest()
+    if lan then
+        own_search.OnlineMode = 1 -- ECommonSessionOnlineMode::LAN
+    end
+    mgr:FindSessions(UEHelpers.GetPlayerController(), own_search)
+    log("search started; wait about 20 seconds, then run coop_found")
 end
 
 -- Travel to the current map as a host without creating an online session,
@@ -516,6 +581,21 @@ RegisterConsoleCommandHandler("coop_cojoin", function(_, params)
     local mode = first_param(params)
     on_game_thread("cojoin", function()
         cojoin(mode)
+    end)
+    return true
+end)
+RegisterConsoleCommandHandler("coop_found", function()
+    on_game_thread("found", found)
+    return true
+end)
+RegisterConsoleCommandHandler("coop_joinfound", function()
+    on_game_thread("joinfound", joinfound)
+    return true
+end)
+RegisterConsoleCommandHandler("coop_find", function(_, params)
+    local mode = first_param(params)
+    on_game_thread("find", function()
+        find(mode)
     end)
     return true
 end)
