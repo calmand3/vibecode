@@ -3,11 +3,11 @@
 -- Answers one question: can Unreal's built-in networking be switched on in
 -- Code Vein II, and how far does a second player get?
 --
---   Ctrl+F6  dump what the game is running (classes, map, net role)
---   Ctrl+F7  HOST: reload the current map as a listen server
---   Ctrl+F8  JOIN: connect to the address in config.lua
---
--- Same actions from the UE4SS console: coop_dump, coop_host, coop_join [ip]
+-- Console commands (the hotkeys below do not work yet):
+--   coop_host        HOST: at the title screen, enter the hub as a LAN host
+--   coop_join [ip]   GUEST: at the title screen, connect to the host
+--   coop_dump        dump what the game is running (classes, map, net role)
+--   coop_state       session and network status
 -- Everything is logged with the prefix [CV2Coop] in UE4SS.log.
 
 local UEHelpers = require("UEHelpers")
@@ -369,10 +369,16 @@ local function session()
     state()
 end
 
+-- Host: enter the hub as a LAN listen server. Run this at the TITLE screen.
+-- Reloading the hub from inside the hub hangs, and without bIsLanMatch the
+-- game listens through Steam instead of opening a network port.
 local function host()
-    local map = current_map()
-    log("hosting: reloading '" .. map .. "' as a listen server on port " .. config.port)
-    console("open " .. map .. "?listen")
+    if current_map() ~= "Title" then
+        log("run coop_host at the title screen; reloading the hub from inside it hangs")
+        return
+    end
+    log("hosting: opening " .. config.host_map .. " as a LAN listen server on port " .. config.port)
+    console("open " .. config.host_map .. "?listen?bIsLanMatch")
 end
 
 local function join(address)

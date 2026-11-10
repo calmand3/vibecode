@@ -2,59 +2,82 @@
 
 Goal: two players in the same Code Vein II world on PC.
 
-Code Vein II ships single-player only. It runs on Unreal Engine 5, and the
-existing mods for it are built on [UE4SS](https://github.com/UE4SS-RE/RE-UE4SS),
-so this mod is too.
+Code Vein II ships single-player only, but the game contains a switched-off
+two-player (host and guest) co-op system. This mod turns it back on. It is a
+[UE4SS](https://github.com/UE4SS-RE/RE-UE4SS) Lua mod.
 
 ## Where this stands
 
-**Phase 0 — probe (this is what is in the repo now).** Nothing here has been
-run against the game yet. The probe is a small UE4SS Lua mod that finds out
-whether Unreal's built-in networking can be switched on, which decides how the
-rest of the mod gets built.
+**Two players can share the hub.** Tested on the free Character Creator Demo
+with a PC hosting and a second Windows device joining over the home network:
+both players see each other and movement is smooth.
 
-## The plan
+Not yet tested or working:
 
-| Phase | What | Done when |
+- Combat, enemies, bosses and progression. The demo has none, so this needs
+  the full game.
+- The host's own character. Hosting skips the title menu, so the host loads
+  as a default character instead of their saved one.
+- Play over the internet. Only a local network has been tried.
+- The game's session layer on top of the connection (host/guest roles,
+  invites). Sessions can be created and found, but joining through them has
+  not worked yet.
+- Hotkeys. Use the console commands.
+
+## How to play (local network)
+
+Both devices need the game, UE4SS (an experimental build), and this mod.
+
+1. Extract UE4SS into the game's `Binaries\Win64` folder.
+2. In `ue4ss\Mods\mods.txt`, set every line to `0` except
+   `ConsoleEnablerMod : 1`. One of the bundled mods crashes the game.
+3. Copy `mod/CV2Coop` into `ue4ss\Mods`.
+
+**Host**
+
+1. At the title screen, open the console (tilde or F10) and run `coop_host`.
+2. Allow the game through the firewall if asked.
+3. Find the PC's local address with `ipconfig`.
+
+**Guest**
+
+1. At the title screen, run `coop_join <host address>`, for example
+   `coop_join 192.168.0.122`. Or set `host_address` in
+   `mod/CV2Coop/scripts/config.lua` and run `coop_join`.
+
+The two devices must be different machines. A second copy of the game on the
+same PC crashes when UE4SS is loaded in both.
+
+## What we learned
+
+- **The game has co-op built in.** The player character is full of
+  replication functions, and there is a session manager
+  (`BP_AppOnlineSessionManager_C`) with create, find, join, kick and invite
+  functions, plus `GetHostPlayer` / `GetGuestPlayer` on `PlayerManager`.
+- **Hosting must start from the title screen.** Reopening the hub from inside
+  the hub (by `open`, `ServerTravelOnly` or `ServerTravelOnlyTest`) hangs on
+  an endless load. `open MainWorld?listen` from the title screen works.
+- **The LAN flag opens the network port.** Without `?bIsLanMatch` the host
+  listens through Steam and has no port to connect to. With it, the host
+  listens on UDP 7777.
+- **Sessions need an online login first.** `CreateSessionWithMapName`
+  succeeds after `TryToLoginForOnlinePlay(0)`; plain `CreateSession` fails.
+
+## Other commands
+
+`coop_dump`, `coop_state`, `coop_session`, `coop_survey`,
+`coop_funcs <object> [filter]`, `coop_objs <ClassName>`,
+`coop_call <object> <Function> [arguments]`, `coop_widgets [filter]`,
+`coop_hide <filter>`, `coop_cohost [lan|online|map|go]`, `coop_cojoin`,
+`coop_travel`. These are for exploring the game's co-op code; see
+`mod/CV2Coop/scripts/main.lua`.
+
+## Plan
+
+| Phase | What | Status |
 | --- | --- | --- |
-| 0 | Probe: turn on a listen server, try to connect a second copy | We have logs from a host and a join attempt |
-| 1 | Second player exists: both players see each other move | Two characters walk around the same map |
-| 2 | Combat: attacks, damage, enemy health and death agree on both sides | A shared fight ends the same way for both players |
-| 3 | World: enemy AI, bosses, pickups, checkpoints, map travel | A full area is playable start to finish |
-| 4 | Usability: invite flow, reconnects, installer | Someone else can install it and join |
-
-Phase 0 has two possible outcomes, and they lead to different mods:
-
-- **The engine's netcode works.** The join connects and a second character
-  spawns. Then the work is fixing, one by one, the game systems that were
-  never written to replicate. This is the faster route.
-- **It does not.** The join is refused, crashes, or the netcode was compiled
-  out. Then the mod has to carry its own sync: a C++ UE4SS mod that sends
-  player state over its own connection and drives a puppet character on the
-  other side. Slower, but it does not depend on the game cooperating.
-
-## Run the probe
-
-You need Code Vein II on Steam (Windows) and UE4SS installed for it. The
-community setup guide linked from the Code Vein II mods on Nexus covers the
-UE4SS install.
-
-1. Copy the `mod/CV2Coop` folder into the game's `Binaries\Win64\ue4ss\Mods`
-   folder. The `enabled.txt` inside it turns the mod on.
-2. Start the game and load into the world.
-3. Press **Ctrl+F6**. This writes a dump of what the game is running.
-4. Press **Ctrl+F7**. This reloads the current map as a listen server. Once it
-   has loaded, press **Ctrl+F6** again.
-5. Send back `UE4SS.log` from `Binaries\Win64\ue4ss` (or just the lines
-   starting with `[CV2Coop]`), and say what happened on screen.
-
-Back up your save first. Reloading the map this way is not something the game
-expects, and the save folder is cheap to copy.
-
-To try a join, a second PC with the game and the mod sets the host's IP in
-`mod/CV2Coop/scripts/config.lua` and presses **Ctrl+F8** once in the world.
-The host needs UDP port 7777 open. A crash or a refused connection is still a
-useful result — send the log either way.
-
-The same actions are available from the UE4SS console as `coop_dump`,
-`coop_host` and `coop_join <ip>`.
+| 0 | Find out whether the engine's netcode can be switched on | Done |
+| 1 | Two players see each other move | Done on the demo, local network |
+| 2 | Combat: attacks, damage, enemy health and death agree on both sides | Needs the full game |
+| 3 | World: enemy AI, bosses, pickups, checkpoints, map travel | Not started |
+| 4 | Usability: own characters, internet play, invite flow, installer | Not started |

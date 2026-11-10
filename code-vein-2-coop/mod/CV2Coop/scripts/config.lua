@@ -6,4 +6,6 @@ return {
     -- Unreal's default listen-server port. The host must allow it through
     -- their firewall (UDP).
     port = 7777,
+    -- The map the host opens.
+    host_map = "MainWorld",
 }
