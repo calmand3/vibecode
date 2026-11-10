@@ -294,19 +294,14 @@ local function class_info(path)
         return
     end
     log("---- class " .. class:GetFullName() .. " ----")
+    -- Names only. Reading parameter and variable types here crashed the game.
     log("functions:")
     class:ForEachFunction(function(fn)
-        log("  " .. fn:GetFName():ToString() .. "(" .. signature(fn) .. ")")
+        log("  " .. fn:GetFName():ToString())
     end)
     log("variables:")
     class:ForEachProperty(function(prop)
-        local text = prop:GetFName():ToString()
-        for _, getter in ipairs({ "GetPropertyClass", "GetStruct" }) do
-            pcall(function()
-                text = text .. ": " .. prop[getter](prop):GetFName():ToString()
-            end)
-        end
-        log("  " .. text)
+        log("  " .. prop:GetFName():ToString())
     end)
     log("---- end class ----")
 end
