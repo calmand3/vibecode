@@ -481,6 +481,15 @@ end
 
 -- Join the first session any search found.
 local function joinfound()
+    local mgr = target_object("session")
+    local own_count = 0
+    pcall(function() own_count = #mgr.SearchResults end)
+    if own_count > 0 then
+        log("joining the first of " .. own_count .. " result(s) from the game's own search")
+        mgr:JoinSession(UEHelpers.GetPlayerController(), mgr.SearchResults[1])
+        state()
+        return
+    end
     for _, req in ipairs(searches()) do
         local count = 0
         pcall(function() count = #req.Results end)
@@ -725,6 +734,22 @@ LoopAsync(2000, function()
             pcall(function()
                 text = text .. ", search results: " .. #watch_mgr.SearchResults
             end)
+            -- Who is connected: guests on a host, the host link on a guest.
+            pcall(function()
+                local driver = UEHelpers.GetWorld().NetDriver
+                if valid(driver) then
+                    text = text .. ", guests connected: " .. #driver.ClientConnections
+                        .. ", linked to host: " .. tostring(valid(driver.ServerConnection))
+                else
+                    text = text .. ", no network driver"
+                end
+            end)
+            -- A guest's connection attempt lives here until it succeeds.
+            if watch_mgr:IsGuestPlayer() then
+                pcall(function()
+                    text = text .. ", connecting: " .. tostring(valid(FindFirstOf("PendingNetGame")))
+                end)
+            end
             if text ~= last_watch then
                 last_watch = text
                 log("[watch] " .. text)
