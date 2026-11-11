@@ -80,6 +80,31 @@ Works with one Steam account (second device in offline mode).
 The same steps should work over a virtual LAN tool for play across the
 internet; that is untested.
 
+## Test setup used so far
+
+- Game: CODE VEIN II Character Creator Demo (Steam app 3733960), Unreal
+  Engine 5.4.
+- UE4SS: experimental build `UE4SS_v3.0.1-1218-g560411f1`. The stable
+  v3.0.1 release is too old for this game.
+- Two Windows devices on one home network: a desktop PC and a handheld.
+  The local-network test used one Steam account with the handheld offline;
+  the Steam test used two accounts, both online.
+- The shipped game writes no log of its own. Everything known comes from
+  the mod's output in `UE4SS.log`, so new experiments should log what they
+  do. Upload logs as files; the startup section is several hundred lines.
+
+## Next steps
+
+1. Full game: check UE4SS and the mod load, and that the same steps open a
+   world and connect a second player. Map and class names may differ from
+   the demo.
+2. Combat: does damage, enemy health and death agree on both sides?
+3. Let the world owner use their own character, which probably means
+   opening the world through the title menu's normal load.
+4. Stop the game's disband routine from crashing the remaining player when
+   the other leaves.
+5. Replace typed commands with an on-screen flow, and try Steam invites.
+
 ## What we learned
 
 - **The game has co-op built in.** The player character is full of
