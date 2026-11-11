@@ -1,4 +1,4 @@
 # vibecode
 Vibecode Projects
 
-- [code-vein-2-coop](code-vein-2-coop/) — co-op mod for Code Vein II
+- Co-op mod for Code Vein II: moved to its own repository, [CV2gether](https://github.com/calmand3/CV2gether)
