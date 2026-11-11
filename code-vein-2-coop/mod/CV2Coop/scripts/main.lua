@@ -541,16 +541,20 @@ local function session()
     state()
 end
 
--- Host: enter the hub as a LAN listen server. Run this at the TITLE screen.
--- Reloading the hub from inside the hub hangs, and without bIsLanMatch the
--- game listens through Steam instead of opening a network port.
-local function host()
+-- Open your world to another player. Run this at the TITLE screen.
+--   coop_host        local network: the other player joins with coop_join <ip>
+--   coop_host steam  Steam: then call a helper with coop_summon
+-- Reloading the hub from inside the hub hangs, so this must start from the
+-- title screen. Without bIsLanMatch the game listens through Steam and
+-- opens no network port.
+local function host(mode)
     if current_map() ~= "Title" then
         log("run coop_host at the title screen; reloading the hub from inside it hangs")
         return
     end
-    log("hosting: opening " .. config.host_map .. " as a LAN listen server on port " .. config.port)
-    console("open " .. config.host_map .. "?listen?bIsLanMatch")
+    local steam = mode == "steam"
+    log("opening " .. config.host_map .. " to another player over " .. (steam and "Steam" or "the local network"))
+    console("open " .. config.host_map .. "?listen" .. (steam and "" or "?bIsLanMatch"))
 end
 
 local function join(address)
@@ -583,8 +587,26 @@ RegisterConsoleCommandHandler("coop_dump", function()
     on_game_thread("dump", dump)
     return true
 end)
-RegisterConsoleCommandHandler("coop_host", function()
-    on_game_thread("host", host)
+RegisterConsoleCommandHandler("coop_host", function(_, params)
+    local mode = params and params[1] and params[1]:lower() or nil
+    on_game_thread("host", function()
+        host(mode)
+    end)
+    return true
+end)
+-- Plain names for the two halves of Steam co-op.
+--   coop_offer   helper: offer to be called into someone's world
+--   coop_summon  world owner: find an offer; then coop_joinfound to accept it
+RegisterConsoleCommandHandler("coop_offer", function()
+    on_game_thread("offer", function()
+        cohost("net")
+    end)
+    return true
+end)
+RegisterConsoleCommandHandler("coop_summon", function()
+    on_game_thread("summon", function()
+        cojoin("net")
+    end)
     return true
 end)
 RegisterConsoleCommandHandler("coop_join", function(_, params)
