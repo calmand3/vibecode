@@ -80,6 +80,28 @@ Works with one Steam account (second device in offline mode).
 The same steps should work over a virtual LAN tool for play across the
 internet; that is untested.
 
+## Testing: the owner's own character
+
+Untested. Three tries, cheapest first. Do each on the world owner's device
+and note which character appears in the hub.
+
+1. **Through the title menu.** At the title screen run `coop_arm` (or
+   `coop_arm steam`), then start the game from the title menu as usual. The
+   mod adds "listen" to the map the menu opens. In the hub, run
+   `coop_state`: "is server: true, standalone: false" means the world is
+   open to another player.
+2. **Back to the title.** Load into the hub normally, return to the title
+   screen from the game's menu, then run `coop_host`. This checks whether
+   the character stays loaded after leaving the hub.
+3. **Same options.** Load into the hub normally and look in `UE4SS.log` for
+   the line `[travel] map loaded: ... options '...'`. If the options are not
+   empty, restart, and at the title screen type
+   `open MainWorld?<those options>?listen?bIsLanMatch` in the console.
+
+Every map load is logged with the tag `[travel]`, including which function
+opened it. Send the log after try 1 whatever happens: if it says "still
+armed", the title menu opens maps some other way and the log shows how.
+
 ## Test setup used so far
 
 - Game: CODE VEIN II Character Creator Demo (Steam app 3733960), Unreal
@@ -142,7 +164,7 @@ internet; that is untested.
 `coop_objs <ClassName>`, `coop_class <path>`,
 `coop_call <object> <Function> [arguments]`, `coop_widgets [filter]`,
 `coop_hide <filter>`, `coop_cohost [lan|online|map|net|go]`,
-`coop_cojoin [net]`, `coop_travel`. These are for exploring the game's
+`coop_cojoin [net]`, `coop_travel`, `coop_arm [steam|off]`. These are for exploring the game's
 co-op code; see `mod/CV2Coop/scripts/main.lua`. The mod also logs the
 session and connection state whenever it changes, tagged `[watch]`.
 

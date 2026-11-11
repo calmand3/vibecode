@@ -6,6 +6,8 @@
 -- Console commands (the hotkeys below do not work yet):
 --   coop_host        HOST: at the title screen, enter the hub as a LAN host
 --   coop_join [ip]   GUEST: at the title screen, connect to the host
+--   coop_arm [steam] HOST: at the title screen, then start from the title
+--                    menu, to open the world with your own character
 --   coop_dump        dump what the game is running (classes, map, net role)
 --   coop_state       session and network status
 -- Everything is logged with the prefix [CV2Coop] in UE4SS.log.
@@ -567,6 +569,85 @@ local function join(address)
     console("open " .. address)
 end
 
+-- Owner's own character. coop_host opens the world directly, which skips the
+-- title menu's load, so the owner arrives as a default character. Instead,
+-- let the title menu open the world itself and add "listen" to that load.
+--   coop_arm         local network
+--   coop_arm steam   Steam
+--   coop_arm off     cancel
+-- Then start the game from the title menu as usual.
+local armed = nil -- nil, "lan" or "steam"
+
+local function listen_options()
+    return "listen" .. (armed == "lan" and "?bIsLanMatch" or "")
+end
+
+local function arm(mode)
+    if mode == "off" then
+        armed = nil
+        log("[travel] disarmed")
+        return
+    end
+    armed = mode == "steam" and "steam" or "lan"
+    log("[travel] armed (" .. armed .. "): the next map the game opens gets ?" .. listen_options()
+        .. ". Now start the game from the title menu.")
+end
+
+-- Watch the functions a game can open a map with. Each call is logged, so
+-- the log shows which one the title menu uses and with what options. When
+-- armed, the options get "listen" added. text_param is the string parameter
+-- holding the options (or the whole address, for ClientTravel).
+local function watch_open(path, describe)
+    local ok, err = pcall(function()
+        RegisterHook(path, function(_, ...)
+            local params = { ... }
+            pcall(function()
+                local text_param, label = describe(params)
+                local text = text_param:get():ToString()
+                log("[travel] " .. label .. " options '" .. text .. "'")
+                if armed and not text:lower():find("listen", 1, true) then
+                    local sep = (text == "" and label:find("OpenLevel", 1, true)) and "" or "?"
+                    local changed = text .. sep .. listen_options()
+                    text_param:set(changed)
+                    log("[travel] armed: changed to '" .. changed .. "'")
+                    armed = nil
+                end
+            end)
+        end)
+    end)
+    log("[travel] watching " .. path .. ": " .. (ok and "yes" or ("no, " .. tostring(err))))
+end
+
+watch_open("/Script/Engine.GameplayStatics:OpenLevel", function(p)
+    local name = "?"
+    pcall(function() name = p[2]:get():ToString() end)
+    return p[4], "OpenLevel " .. name
+end)
+watch_open("/Script/Engine.GameplayStatics:OpenLevelBySoftObjectPtr", function(p)
+    return p[4], "OpenLevelBySoftObjectPtr"
+end)
+watch_open("/Script/Engine.PlayerController:ClientTravel", function(p)
+    return p[1], "ClientTravel"
+end)
+
+-- After every map load, log the map and the options it was opened with,
+-- however the load was started.
+pcall(function()
+    RegisterLoadMapPostHook(function()
+        safely("map loaded", function()
+            local world = UEHelpers.GetWorld()
+            local gm = UEHelpers.GetGameplayStatics():GetGameMode(world)
+            local options = valid(gm) and gm.OptionsString:ToString() or "<no game mode>"
+            log("[travel] map loaded: " .. current_map() .. ", options '" .. options
+                .. "', is server: " .. tostring(UEHelpers.GetKismetSystemLibrary():IsServer(world))
+                .. ", standalone: " .. tostring(UEHelpers.GetKismetSystemLibrary():IsStandalone(world)))
+            if armed then
+                log("[travel] still armed: this load did not go through a watched function")
+            end
+        end)
+    end)
+end)
+
 local function on_game_thread(label, fn)
     ExecuteInGameThread(function()
         safely(label, fn)
@@ -591,6 +672,13 @@ RegisterConsoleCommandHandler("coop_host", function(_, params)
     local mode = params and params[1] and params[1]:lower() or nil
     on_game_thread("host", function()
         host(mode)
+    end)
+    return true
+end)
+RegisterConsoleCommandHandler("coop_arm", function(_, params)
+    local mode = params and params[1] and params[1]:lower() or nil
+    on_game_thread("arm", function()
+        arm(mode)
     end)
     return true
 end)
