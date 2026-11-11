@@ -744,8 +744,9 @@ LoopAsync(2000, function()
                     text = text .. ", no network driver"
                 end
             end)
-            -- A guest's connection attempt lives here until it succeeds.
-            if watch_mgr:IsGuestPlayer() then
+            -- A connection attempt lives here until it succeeds. Either side
+            -- of a session may be the one that travels.
+            if watch_mgr:HasSessions() then
                 pcall(function()
                     text = text .. ", connecting: " .. tostring(valid(FindFirstOf("PendingNetGame")))
                 end)
