@@ -706,4 +706,32 @@ RegisterConsoleCommandHandler("coop_funcs", function(_, params)
     return true
 end)
 
+-- Log the session state whenever it changes, so button presses in the debug
+-- menu leave a trail in the log without anyone typing coop_state.
+local watch_mgr, last_watch = nil, nil
+LoopAsync(2000, function()
+    ExecuteInGameThread(function()
+        pcall(function()
+            if not valid(watch_mgr) then
+                watch_mgr = FindFirstOf("BP_AppOnlineSessionManager_C")
+            end
+            if not valid(watch_mgr) then
+                return
+            end
+            local text = watch_mgr:GetSessionStateStr():ToString()
+                .. ", host: " .. tostring(watch_mgr:IsHostPlayer())
+                .. ", guest: " .. tostring(watch_mgr:IsGuestPlayer())
+                .. ", has session: " .. tostring(watch_mgr:HasSessions())
+            pcall(function()
+                text = text .. ", search results: " .. #watch_mgr.SearchResults
+            end)
+            if text ~= last_watch then
+                last_watch = text
+                log("[watch] " .. text)
+            end
+        end)
+    end)
+    return false
+end)
+
 log("probe loaded. Ctrl+F6 dump, Ctrl+F7 host, Ctrl+F8 join")
